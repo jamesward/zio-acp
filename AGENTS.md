@@ -59,8 +59,10 @@ facts and exceptions.
 - `CrossSdkSpec` needs Docker (see "Docker for tests" in zen-of-projects). Its image
   (`src/test/resources/interop/Dockerfile`, built by Testcontainers) holds JDK 21, Python, JBang and the peer SDKs
   built from source; the first build takes about 15 minutes, later runs reuse Docker's layer cache. The Scala programs
-  are the test classpath, mounted into the container. Behind a TLS-intercepting proxy the spec passes the host's
-  `HTTPS_PROXY`, CA bundle (`SSL_CERT_FILE` and friends) and `~/.m2/settings.xml` into the image build.
+  are the test classpath, mounted into the container. The spec passes the host's environment config into the image
+  build when it exists: `HTTPS_PROXY`, the CA bundle (`SSL_CERT_FILE` and friends), `~/.m2/settings.xml` (whose mirror
+  the Java SDK's Maven Wrapper also uses) and `~/.gradle/init.d/` scripts. With a warm image `testFull` takes about a
+  minute.
 - The interop programs (`src/test/scala/interop`) implement the cross-SDK step catalogue (`steps.json` in the Java
   SDK's `integration-testing/`): `InteropAgent` and `InteropClient`, launched in the container by
   `src/test/resources/interop/scala/launch/*.sh`. Expected failures caused by zio-acp go in

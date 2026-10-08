@@ -49,6 +49,17 @@ object JavaSdkInteropSpec extends ZIOSpecDefault:
 
   private def text(s: String): java.util.List[J.ContentBlock] = java.util.List.of(J.TextContent(s))
 
+  /**
+   * Takes the chunks received so far once there are `count` of them, or after a second: the Java SDK delivers updates on
+   * its own thread, so they can trail the prompt's response (the cross-SDK catalogue allows the same grace).
+   */
+  private def take(chunks: CopyOnWriteArrayList[String], count: Int): List[String] =
+    val deadline = java.lang.System.nanoTime() + 1000000000L
+    while chunks.size < count && java.lang.System.nanoTime() < deadline do Thread.sleep(10)
+    val taken = chunks.asScala.toList
+    chunks.clear()
+    taken
+
   def spec = suite("JavaSdkInteropSpec")(
     test("a Java SDK client drives the Scala agent"):
       ZIO.attemptBlocking:
@@ -59,13 +70,11 @@ object JavaSdkInteropSpec extends ZIOSpecDefault:
           val init = client.initialize()
           val session = client.newSession(J.NewSessionRequest("/tmp", java.util.List.of()))
           val echo = client.prompt(J.PromptRequest(session.sessionId(), text("hello")))
-          val echoed = chunks.asScala.mkString
-          chunks.clear()
+          val echoed = take(chunks, 2).mkString
           val permission = client.prompt(J.PromptRequest(session.sessionId(), text("#permission allow")))
-          val permitted = chunks.asScala.toList
-          chunks.clear()
+          val permitted = take(chunks, 1)
           val read = client.prompt(J.PromptRequest(session.sessionId(), text("#fs read /x.txt")))
-          val readChunks = chunks.asScala.toList
+          val readChunks = take(chunks, 1)
           assertTrue(
             init.protocolVersion() == 1,
             init.agentInfo().name() == "interop-scala-agent",
