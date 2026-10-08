@@ -30,6 +30,7 @@ object CrossSdkSpec extends ZIOSpecDefault:
     "Dockerfile",
     "java-proxy-opts",
     "show-logs",
+    "build-env",
     "add-scala.py",
     "scala-expectations.json",
     "scala/launch/build.sh",

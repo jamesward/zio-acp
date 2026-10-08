@@ -1,0 +1,11 @@
+# Sourced by the image's build steps: the JDK 21 the builds run on (the Kotlin SDK's Gradle doesn't run on JDK 25),
+# the proxy as JVM properties, and the host's Maven mirror (from settings.xml) for the Maven Wrapper's own download,
+# which doesn't read settings.xml.
+export JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH"
+JAVA_TOOL_OPTIONS="$(java-proxy-opts)"
+export JAVA_TOOL_OPTIONS
+if [ -f /root/.m2/settings.xml ]; then
+    mirror="$(sed -n 's:.*<url>\(.*\)</url>.*:\1:p' /root/.m2/settings.xml | head -1)"
+    [ -n "$mirror" ] && export MVNW_REPOURL="${mirror%/}"
+fi
+true

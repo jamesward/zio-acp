@@ -15,10 +15,11 @@ ARG NO_PROXY
 
 COPY env/ /tmp/env/
 COPY java-proxy-opts /usr/local/bin/java-proxy-opts
+COPY build-env /usr/local/bin/build-env
 
 # JDK 21 is the Kotlin SDK's Gradle toolchain; JDK 25 (the image's) runs everything else. Both read the system
 # truststore, which holds the host's CA bundle when one was given.
-RUN chmod +x /usr/local/bin/java-proxy-opts \
+RUN chmod +x /usr/local/bin/java-proxy-opts /usr/local/bin/build-env \
  && apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends git curl unzip python3 openjdk-21-jdk-headless ca-certificates-java > /dev/null \
  && rm -rf /var/lib/apt/lists/* \
@@ -44,18 +45,18 @@ WORKDIR /java-sdk/integration-testing
 # run on JDK 25); the programs run on JDK 25. A failed step prints its build logs.
 COPY show-logs /usr/local/bin/show-logs
 
-RUN export JAVA_TOOL_OPTIONS="$(java-proxy-opts)" JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH" \
+RUN . build-env \
  && chmod +x /usr/local/bin/show-logs \
  && { scripts/run-all.sh --prepare-only --only x-java-java-stdio && jbang build RunScenario.java > /dev/null || show-logs; }
 
-RUN export JAVA_TOOL_OPTIONS="$(java-proxy-opts)" JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH" \
+RUN . build-env \
  && { jbang RunScenario.java --prepare x-java-kotlin-stdio --peer "kotlin-sdk=$KOTLIN_SDK_REF" || show-logs; }
 
 COPY scala/ programs/scala/
 COPY scala-expectations.json expectations/scala.json
 COPY add-scala.py /tmp/add-scala.py
 
-RUN export JAVA_TOOL_OPTIONS="$(java-proxy-opts)" JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH" \
+RUN . build-env \
  && chmod +x programs/scala/launch/*.sh \
  && python3 /tmp/add-scala.py matrix.json \
  && jbang GenConfigs.java > /dev/null \
