@@ -15,4 +15,3 @@ dist
 /.settings
 /.bsp/
 /.kiro/skills/
-/integration-testing/.cache/

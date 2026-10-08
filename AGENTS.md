@@ -22,8 +22,9 @@ facts and exceptions.
 - The codecs are derived with zio-json (`derives JsonCodec`) instead of zio-schema, and the unions the ACP schema
   defines with flattened or untagged variants, open values and catch-all cases are assembled from derived codecs with
   the helpers in `schema/JsonSupport.scala`.
-- Test-only dependencies `com.agentclientprotocol:acp-core` and `acp-json-jackson2` (the ACP Java SDK) and
-  `com.networknt:json-schema-validator` are interop and schema-conformance tooling, not library dependencies.
+- Test-only dependencies `com.agentclientprotocol:acp-core` and `acp-json-jackson2` (the ACP Java SDK),
+  `com.networknt:json-schema-validator` and `org.testcontainers:testcontainers` are interop and conformance tooling,
+  not library dependencies.
 
 ## Protocol sources
 
@@ -31,8 +32,9 @@ facts and exceptions.
   [agentclientprotocol/agent-client-protocol](https://github.com/agentclientprotocol/agent-client-protocol) at
   `1c2b84c785c923ed283a4e7ea3badb2422596418` (Apache-2.0). `SchemaSpec` validates every sample in `Samples.scala`
   against it. When the schema changes, replace the file, update the commit here, and extend the model and `Samples`.
-- `integration-testing/run.sh` pins the ACP Java SDK commit whose `integration-testing/` suite it runs
-  (`JAVA_SDK_REF`). Bump it with the other dependencies.
+- `CrossSdkSpec` pins the ACP Java SDK commit whose `integration-testing/` suite it runs (`JavaSdkRef`) and the
+  Kotlin SDK commit it runs against (`KotlinSdkRef`). Bump them with the other dependencies; a Kotlin bump can change
+  the Kotlin SDK's expected failures, which live in that suite's `expectations/kotlin.json`.
 
 ## Build, Test & Dev Workflow
 
@@ -47,18 +49,25 @@ facts and exceptions.
     `/tmp/sbt-mcp-stdio.log`, `/tmp/sbt-mcp-server.log`.
 - Commands (CLI fallback form):
   - `./sbt "Test / compile"` — compile main + tests.
-  - `./sbt testFull` — full test suite (what CI runs): codecs, schema conformance, agent/client in memory, and the ACP
-    Java SDK in both directions (`JavaSdkInteropSpec` starts the Scala interop agent as a subprocess).
+  - `./sbt testFull` — full test suite (what CI runs): codecs, schema conformance, agent/client in memory, the ACP
+    Java SDK in both directions (`JavaSdkInteropSpec`), and `CrossSdkSpec`.
   - `./sbt "testOnly *SchemaSpec"` — a single spec.
+  - `./sbt "testOnly *CrossSdkSpec"` — the ACP SDKs' cross-SDK suite: its step catalogue between the Scala interop
+    programs and the Java and Kotlin SDKs (four stdio cells), and its raw JSON-RPC driver against the Scala agent and
+    client.
   - `./sbt interopClasspath` — writes `target/interop-classpath.txt` for running the interop programs by hand.
-  - `integration-testing/run.sh` — the ACP cross-SDK suite (Java and Kotlin SDKs, raw JSON-RPC driver); CI runs it in
-    `.github/workflows/interop.yml`. It needs JBang, python3, git, and JDK 21 for the Kotlin cells; the first run
-    clones and builds the peer SDKs (several minutes). `--only <cell>` and `--list` are passed to the runner.
+- `CrossSdkSpec` needs Docker (see "Docker for tests" in zen-of-projects). Its image
+  (`src/test/resources/interop/Dockerfile`, built by Testcontainers) holds JDK 21, Python, JBang and the peer SDKs
+  built from source; the first build takes about 15 minutes, later runs reuse Docker's layer cache. The Scala programs
+  are the test classpath, mounted into the container. Behind a TLS-intercepting proxy the spec passes the host's
+  `HTTPS_PROXY`, CA bundle (`SSL_CERT_FILE` and friends) and `~/.m2/settings.xml` into the image build.
 - The interop programs (`src/test/scala/interop`) implement the cross-SDK step catalogue (`steps.json` in the Java
-  SDK's `integration-testing/`): `InteropAgent` and `InteropClient`, launched by
-  `integration-testing/programs/scala/launch/*.sh`. Expected failures caused by zio-acp go in
-  `integration-testing/expectations/scala.json` (format: the Java SDK's `integration-testing/expectations/README.md`).
-- Tests need no network beyond dependency resolution, and none are paid or metered.
+  SDK's `integration-testing/`): `InteropAgent` and `InteropClient`, launched in the container by
+  `src/test/resources/interop/scala/launch/*.sh`. Expected failures caused by zio-acp go in
+  `src/test/resources/interop/scala-expectations.json` (format: the Java SDK's
+  `integration-testing/expectations/README.md`).
+- Tests need no network beyond dependency resolution and the first `CrossSdkSpec` image build, and none are paid or
+  metered.
 
 ## Releasing
 

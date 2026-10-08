@@ -38,8 +38,9 @@ RUN git clone -q https://github.com/agentclientprotocol/java-sdk.git /java-sdk \
 WORKDIR /java-sdk/integration-testing
 
 # The slow part, cached as long as the refs don't change: install the SDK, build the Java programs, and clone and
-# build the Kotlin SDK and its programs.
-RUN export JAVA_TOOL_OPTIONS="$(java-proxy-opts)" \
+# build the Kotlin SDK and its programs. The builds run on JDK 21, which the Kotlin SDK's Gradle needs (it doesn't
+# run on JDK 25); the programs run on JDK 25.
+RUN export JAVA_TOOL_OPTIONS="$(java-proxy-opts)" JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH" \
  && scripts/run-all.sh --prepare-only --only x-java-kotlin-stdio --peer "kotlin-sdk=$KOTLIN_SDK_REF" \
  && jbang build RunScenario.java > /dev/null
 
@@ -47,7 +48,7 @@ COPY scala/ programs/scala/
 COPY scala-expectations.json expectations/scala.json
 COPY add-scala.py /tmp/add-scala.py
 
-RUN export JAVA_TOOL_OPTIONS="$(java-proxy-opts)" \
+RUN export JAVA_TOOL_OPTIONS="$(java-proxy-opts)" JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH" \
  && chmod +x programs/scala/launch/*.sh \
  && python3 /tmp/add-scala.py matrix.json \
  && jbang GenConfigs.java > /dev/null \

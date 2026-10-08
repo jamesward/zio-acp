@@ -99,10 +99,9 @@ ACP has no official test kit; zio-acp is checked against everything the ecosyste
 |---|---|
 | [`SchemaSpec`](src/test/scala/com/jamesward/zioacp/SchemaSpec.scala) | A value of every v1 type, every optional field set, validates against the official v1 JSON Schema and writes no property the schema doesn't declare. |
 | [`JavaSdkInteropSpec`](src/test/scala/com/jamesward/zioacp/JavaSdkInteropSpec.scala) | The [ACP Java SDK](https://github.com/agentclientprotocol/java-sdk) client drives the Scala agent, and the Scala client drives a Java SDK agent. |
-| [`integration-testing/run.sh`](integration-testing/run.sh) | The ACP SDKs' cross-SDK interop suite (the Java SDK's `integration-testing/`): its 70+ step catalogue between the Scala programs ([`src/test/scala/interop`](src/test/scala/interop)) and the Java and [Kotlin](https://github.com/agentclientprotocol/kotlin-sdk) SDK programs, in both directions, plus its raw JSON-RPC conformance driver against the Scala agent and client. |
+| [`CrossSdkSpec`](src/test/scala/com/jamesward/zioacp/CrossSdkSpec.scala) | The ACP SDKs' cross-SDK interop suite (the Java SDK's `integration-testing/`), in a Testcontainers image: its 70+ step catalogue between the Scala programs ([`src/test/scala/interop`](src/test/scala/interop)) and the Java and [Kotlin](https://github.com/agentclientprotocol/kotlin-sdk) SDK programs, in both directions, plus its raw JSON-RPC conformance driver against the Scala agent and client. |
 
-Run the full test suite with `./sbt testFull`, and the cross-SDK suite with `integration-testing/run.sh` (needs
-JBang, python3 and JDK 21).
+Run everything with `./sbt testFull`. `CrossSdkSpec` needs Docker; its first image build takes about 15 minutes.
 
 ## License
 
