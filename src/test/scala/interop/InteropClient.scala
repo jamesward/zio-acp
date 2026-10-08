@@ -29,7 +29,7 @@ object InteropClient extends ZIOAppDefault:
       (args, agentCmd) match
         case (List("--transport", "stdio"), Some(cmd)) if steps.nonEmpty =>
           val timeout = System.env("STEP_TIMEOUT_MS").run.flatMap(_.toLongOption).fold(15.seconds)(Duration.fromMillis)
-          val dir = ZIO.attemptBlocking(Files.createTempDirectory("acp-interop-").nn).orDie.run
+          val dir = ZIO.attemptBlocking(Files.createTempDirectory("acp-interop-")).run
           val counters = Counters(Ref.make(0).run, Ref.make(Map.empty[String, Int]).run)
           val runner = ClientSteps(cmd, dir, timeout, counters, Ref.make(Option.empty[Conn]).run, Ref.make(Option.empty[InitializeResponse]).run)
           val results = ZIO.foreach(steps)(runner.run).run
