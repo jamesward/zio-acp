@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Prints the JVM proxy properties for HTTPS_PROXY / HTTP_PROXY, if set (for example http://127.0.0.1:3128).
+set -euo pipefail
+opts=""
+for scheme in https http; do
+    var="$(echo "$scheme" | tr a-z A-Z)_PROXY"
+    url="${!var:-}"
+    [ -n "$url" ] || continue
+    hostport="${url#*://}"; hostport="${hostport%%/*}"; hostport="${hostport##*@}"
+    opts="$opts -D$scheme.proxyHost=${hostport%:*} -D$scheme.proxyPort=${hostport##*:}"
+done
+[ -n "$opts" ] && opts="$opts -Dhttp.nonProxyHosts=localhost|127.*|[::1]"
+echo "$opts"

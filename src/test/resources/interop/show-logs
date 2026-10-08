@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Prints the tail of every log the suite's runner wrote, then fails: a failed image build step shows why.
+find /java-sdk/integration-testing/logs -name '*.log' -newer /java-sdk/integration-testing/matrix.json 2>/dev/null \
+    -exec sh -c 'echo "==== $1"; tail -60 "$1"' _ {} \;
+exit 1

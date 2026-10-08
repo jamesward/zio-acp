@@ -1,0 +1,5 @@
+zio-acp
+Copyright 2026 James Ward
+
+src/test/resources/acp-schema-v1.json is the Agent Client Protocol v1 JSON Schema from
+https://github.com/agentclientprotocol/agent-client-protocol, licensed under the Apache License 2.0.
