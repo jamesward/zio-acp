@@ -23,7 +23,7 @@ trait RpcHandler:
  * arrived, so a response is delivered only after the notifications the peer sent before it. A notification handler must
  * therefore not wait for the response to its own outgoing request; it can fork that work instead.
  *
- * Interrupting an outgoing request sends `$/cancel_request` for it.
+ * Interrupting an outgoing request sends `$/cancel_request` for it and stops waiting for its answer.
  */
 final case class RpcConnection private (
   private val transport: Transport,
@@ -34,22 +34,29 @@ final case class RpcConnection private (
   private val inputClosed: Promise[Nothing, Unit],
 ):
 
-  def request(method: String, params: Json): IO[RpcError, Json] =
+  def request(method: String, params: Json): IO[RpcError, Json] = request(method, params, ZIO.never)
+
+  /**
+   * Sends a request and, when `cancelWhen` completes first, sends `$/cancel_request` for it and keeps waiting for the
+   * peer's answer, which is usually an [[ErrorCode.RequestCancelled]] error.
+   */
+  def request(method: String, params: Json, cancelWhen: UIO[Any]): IO[RpcError, Json] =
     ZIO.uninterruptibleMask: restore =>
       defer:
         val id = RequestId.Number(nextId.getAndUpdate(_ + 1).run)
         val promise = Promise.make[RpcError, Json].run
         register(id, promise).run
         send(Message.Request(id, method, Some(params))).tapError(_ => pending.update(_ - id)).run
-        restore(promise.await).onInterrupt(cancelOutgoing(id)).run
+        val answer = promise.await.raceFirst(cancelWhen *> sendCancel(id) *> promise.await)
+        restore(answer).onInterrupt(pending.update(_ - id) *> sendCancel(id)).run
 
   def notify(method: String, params: Json): IO[RpcError, Unit] =
     send(Message.Notification(method, Some(params)))
 
-  def call[Req, Res](method: RequestMethod[Req, Res], request: Req): IO[RpcError, Res] =
+  def call[Req, Res](method: RequestMethod[Req, Res], request: Req, cancelWhen: UIO[Any] = ZIO.never): IO[RpcError, Res] =
     defer:
       val params = RpcConnection.encode(request)(using method.request.encoder).run
-      val result = this.request(method.name, params).run
+      val result = this.request(method.name, params, cancelWhen).run
       RpcConnection.decodeResult(method.name, result)(using method.response.decoder).run
 
   def notify[N](method: NotificationMethod[N], notification: N): IO[RpcError, Unit] =
@@ -64,12 +71,9 @@ final case class RpcConnection private (
   private def register(id: RequestId, promise: Promise[RpcError, Json]): IO[RpcError, Unit] =
     ZIO.ifZIO(inputClosed.isDone)(ZIO.fail(RpcError.connectionClosed), pending.update(_ + (id -> promise)))
 
-  private def cancelOutgoing(id: RequestId): UIO[Unit] =
-    pending.update(_ - id) *>
-      RpcConnection
-        .encode(CancelRequestNotification(id))
-        .flatMap(notify(Methods.Protocol.CancelRequest.name, _))
-        .catchAllCause(cause => ZIO.logDebugCause(s"could not send $$/cancel_request for $id", cause))
+  private def sendCancel(id: RequestId): UIO[Unit] =
+    notify(Methods.Protocol.CancelRequest, CancelRequestNotification(id))
+      .catchAllCause(cause => ZIO.logDebugCause(s"could not send $$/cancel_request for $id", cause))
 
   private def send(message: Message): IO[RpcError, Unit] =
     transport

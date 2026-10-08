@@ -61,3 +61,14 @@ developers := List(
 )
 
 versionScheme := Some("semver-spec")
+
+// The interop programs (src/test/scala/interop) run as separate processes: write their classpath to a file.
+lazy val interopClasspath = taskKey[File]("Writes the test runtime classpath to target/interop-classpath.txt")
+
+interopClasspath := Def.uncached {
+  val converter = fileConverter.value
+  val files = (Test / fullClasspath).value.map(entry => converter.toPath(entry.data).toFile)
+  val out = baseDirectory.value / "target" / "interop-classpath.txt"
+  IO.write(out, files.mkString(java.io.File.pathSeparator))
+  out
+}

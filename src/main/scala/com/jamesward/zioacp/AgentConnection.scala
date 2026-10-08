@@ -52,6 +52,13 @@ final case class AgentConnection private[zioacp] (
 
   def cancel(sessionId: SessionId): IO[RpcError, Unit] = cancel(CancelNotification(sessionId))
 
+  /**
+   * Calls any agent method. When `cancelWhen` completes first, `$/cancel_request` is sent and the agent's answer,
+   * usually an [[ErrorCode.RequestCancelled]] error, is still awaited.
+   */
+  def call[Req, Res](method: RequestMethod[Req, Res], request: Req, cancelWhen: UIO[Any] = ZIO.never): IO[RpcError, Res] =
+    rpc.call(method, request, cancelWhen)
+
   /** Sends an extension request; `method` must start with `_`. */
   def extMethod(method: String, params: Json): IO[RpcError, Json] = rpc.request(method, params)
 
