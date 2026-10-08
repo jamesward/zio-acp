@@ -6,8 +6,9 @@ FROM eclipse-temurin:25-jdk
 ARG JAVA_SDK_REF
 ARG KOTLIN_SDK_REF
 ARG JBANG_VERSION=0.135.1
-# Set by CrossSdkSpec only when the host has them: a proxy, its CA bundle (env/ca-bundle.crt) and a Maven
-# settings.xml (env/settings.xml), so the build works behind a TLS-intercepting proxy or a Maven mirror.
+# Set by CrossSdkSpec only when the host has them: a proxy, its CA bundle (env/ca-bundle.crt), a Maven settings.xml
+# (env/settings.xml) and Gradle init scripts (env/gradle-init.d/), so the build works behind a TLS-intercepting proxy
+# or with the host's repository mirrors.
 ARG HTTPS_PROXY
 ARG HTTP_PROXY
 ARG NO_PROXY
@@ -27,6 +28,7 @@ RUN chmod +x /usr/local/bin/java-proxy-opts \
  && update-ca-certificates > /dev/null 2>&1 \
  && ln -sf /etc/ssl/certs/java/cacerts "$JAVA_HOME/lib/security/cacerts" \
  && if [ -f /tmp/env/settings.xml ]; then mkdir -p /root/.m2 && cp /tmp/env/settings.xml /root/.m2/settings.xml; fi \
+ && if [ -d /tmp/env/gradle-init.d ]; then mkdir -p /root/.gradle && cp -r /tmp/env/gradle-init.d /root/.gradle/init.d; fi \
  && curl -fsSL -o /tmp/jbang.zip "https://github.com/jbangdev/jbang/releases/download/v${JBANG_VERSION}/jbang-${JBANG_VERSION}.zip" \
  && unzip -q /tmp/jbang.zip -d /opt && ln -s "/opt/jbang-${JBANG_VERSION}/bin/jbang" /usr/local/bin/jbang && rm /tmp/jbang.zip
 

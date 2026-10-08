@@ -36,14 +36,22 @@ object CrossSdkSpec extends ZIOSpecDefault:
     "scala/launch/client.sh",
   )
 
-  /** A proxy's CA bundle and a Maven settings.xml from the host, so the image builds behind a proxy or a mirror. */
+  /**
+   * A proxy's CA bundle, a Maven settings.xml and Gradle init scripts from the host, so the image builds behind a proxy
+   * or with the host's repository mirrors.
+   */
   private val hostEnvironment: List[(String, Path)] =
     val caBundle = List("SSL_CERT_FILE", "CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS")
       .flatMap(sys.env.get)
       .map(Paths.get(_))
       .find(Files.isRegularFile(_))
-    val mavenSettings = Option(Paths.get(java.lang.System.getProperty("user.home"), ".m2", "settings.xml")).filter(Files.isRegularFile(_))
-    caBundle.map("env/ca-bundle.crt" -> _).toList ++ mavenSettings.map("env/settings.xml" -> _).toList
+    val home = Paths.get(java.lang.System.getProperty("user.home"))
+    val mavenSettings = Option(home.resolve(".m2/settings.xml")).filter(Files.isRegularFile(_))
+    val gradleInit = Option(home.resolve(".gradle/init.d")).filter(Files.isDirectory(_)).toList.flatMap: dir =>
+      Files.list(dir).toArray(Array.empty[Path]).toList.filter(p => p.toString.endsWith(".gradle") || p.toString.endsWith(".gradle.kts"))
+    caBundle.map("env/ca-bundle.crt" -> _).toList ++
+      mavenSettings.map("env/settings.xml" -> _).toList ++
+      gradleInit.map(p => s"env/gradle-init.d/${p.getFileName}" -> p)
 
   private def image: ImageFromDockerfile =
     val base = ImageFromDockerfile("zio-acp-interop", false)
