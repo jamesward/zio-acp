@@ -29,9 +29,12 @@ libraryDependencies ++= Seq(
   "dev.zio" %% "zio-test"     % zioVersion % Test,
   "dev.zio" %% "zio-test-sbt" % zioVersion % Test,
 
-  // interop with the official ACP Java SDK (the Kotlin SDK runs in integration-testing/run.sh)
+  // interop with the official ACP Java SDK
   "com.agentclientprotocol" % "acp-core"          % "0.18.0" % Test,
   "com.agentclientprotocol" % "acp-json-jackson2" % "0.18.0" % Test,
+
+  // CrossSdkSpec runs the ACP cross-SDK suite (Java and Kotlin SDKs, raw JSON-RPC driver) in a container
+  "org.testcontainers" % "testcontainers" % "2.0.5" % Test,
 
   // validates our wire format against the vendored ACP v1 JSON Schema
   "com.networknt" % "json-schema-validator" % "3.0.8" % Test,
@@ -60,6 +63,10 @@ developers := List(
 )
 
 versionScheme := Some("semver-spec")
+
+// No Ryuk reaper: CrossSdkSpec stops each one-shot container itself, and Ryuk's published port can collide under
+// rootless Docker. Testcontainers reads this only from the environment.
+Test / envVars += "TESTCONTAINERS_RYUK_DISABLED" -> "true"
 
 // The interop programs (src/test/scala/interop) run as separate processes: tests get their classpath as a
 // system property, and other tools from a file.
