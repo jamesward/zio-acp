@@ -90,7 +90,7 @@ object RequestId:
       case other          => Left(s"invalid request id: $other")
 
   extension (id: RequestId)
-    def toJson: Json =
+    def asJson: Json =
       id match
         case RequestId.Null          => Json.Null
         case RequestId.Number(value) => Json.Num(value)

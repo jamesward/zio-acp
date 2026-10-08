@@ -56,6 +56,7 @@ object RpcError:
   def invalidParams(detail: String): RpcError = RpcError(ErrorCode.InvalidParams, s"Invalid params: $detail")
   def internalError(detail: String): RpcError = RpcError(ErrorCode.InternalError, s"Internal error: $detail")
   val requestCancelled: RpcError = RpcError(ErrorCode.RequestCancelled)
+  val connectionClosed: RpcError = RpcError(ErrorCode.InternalError, "Internal error: connection closed")
   val authRequired: RpcError = RpcError(ErrorCode.AuthRequired)
   def resourceNotFound(detail: String): RpcError = RpcError(ErrorCode.ResourceNotFound, s"Resource not found: $detail")
 
