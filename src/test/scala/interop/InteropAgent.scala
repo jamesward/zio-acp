@@ -177,4 +177,4 @@ final case class InteropAgentImpl(
     defer:
       val s = known(request.sessionId).run
       update(s.id)(st => st.copy(running = st.running + 1)).run
-      Directives(this, s, request, turn).run.ensuring(update(s.id)(st => st.copy(running = st.running - 1))).run
+      Directives(this, s, request, turn).respond.ensuring(update(s.id)(st => st.copy(running = st.running - 1))).run

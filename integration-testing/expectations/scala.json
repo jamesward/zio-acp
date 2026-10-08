@@ -1,0 +1,4 @@
+{
+  "comment": "Expected failures caused by zio-acp or its interop programs (src/test/scala/interop).",
+  "expectations": []
+}

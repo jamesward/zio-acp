@@ -1,0 +1,42 @@
+# The ACP cross-SDK interop suite (integration-testing/run.sh): the step catalogue between the Scala
+# programs and the Java and Kotlin SDKs over stdio, and the raw JSON-RPC conformance driver.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v7
+
+    # JDK 21 is the Kotlin SDK's Gradle toolchain; JDK 25 (last, so the default) builds everything else
+    - uses: actions/setup-java@v6.0.1
+      with:
+        distribution: 'temurin'
+        java-version: |
+          21
+          25
+        cache: 'sbt'
+
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.12'
+
+    - uses: jbangdev/setup-jbang@v0.1.1
+
+    - run: integration-testing/run.sh
+
+    - if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: interop-logs
+        path: integration-testing/.cache/java-sdk/integration-testing/logs/
+        if-no-files-found: ignore

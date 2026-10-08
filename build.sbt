@@ -29,10 +29,9 @@ libraryDependencies ++= Seq(
   "dev.zio" %% "zio-test"     % zioVersion % Test,
   "dev.zio" %% "zio-test-sbt" % zioVersion % Test,
 
-  // interop validation against the official ACP Java and Kotlin SDKs
+  // interop with the official ACP Java SDK (the Kotlin SDK runs in integration-testing/run.sh)
   "com.agentclientprotocol" % "acp-core"          % "0.18.0" % Test,
   "com.agentclientprotocol" % "acp-json-jackson2" % "0.18.0" % Test,
-  "com.agentclientprotocol" % "acp-jvm"           % "0.30.1" % Test,
 
   // validates our wire format against the vendored ACP v1 JSON Schema
   "com.networknt" % "json-schema-validator" % "3.0.8" % Test,
@@ -62,7 +61,14 @@ developers := List(
 
 versionScheme := Some("semver-spec")
 
-// The interop programs (src/test/scala/interop) run as separate processes: write their classpath to a file.
+// The interop programs (src/test/scala/interop) run as separate processes: tests get their classpath as a
+// system property, and other tools from a file.
+Test / javaOptions += Def.uncached {
+  val converter = fileConverter.value
+  val files = (Test / fullClasspath).value.map(entry => converter.toPath(entry.data).toFile)
+  s"-Dinterop.classpath=${files.mkString(java.io.File.pathSeparator)}"
+}
+
 lazy val interopClasspath = taskKey[File]("Writes the test runtime classpath to target/interop-classpath.txt")
 
 interopClasspath := Def.uncached {

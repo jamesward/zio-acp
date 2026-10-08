@@ -30,7 +30,7 @@ final case class Directives(agent: InteropAgentImpl, session: SessionState, requ
 
   private def code(error: RpcError): String = error.code.value.toString
 
-  def run: IO[RpcError, PromptResponse] =
+  def respond: IO[RpcError, PromptResponse] =
     val words = text.split(' ').toList
     if !text.startsWith("#") then echo
     else
@@ -214,8 +214,9 @@ final case class Directives(agent: InteropAgentImpl, session: SessionState, requ
           ZIO.whenZIO(turn.isCancelled.map(!_))(Step.agent("cancel-request.client", true, t0, "the handler was interrupted by $/cancel_request")),
         )
         .run
+      val closed = wasClosed.run
       if turn.isCancelled.run then
-        if !wasClosed.run && grace == 0 then Step.agent("cancel.prompt", true, t0, "session/cancel arrived for the running session").run
+        if !closed && grace == 0 then Step.agent("cancel.prompt", true, t0, "session/cancel arrived for the running session").run
         cancelled
       else endTurn
 
