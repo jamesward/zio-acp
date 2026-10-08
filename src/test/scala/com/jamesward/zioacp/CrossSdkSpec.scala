@@ -28,6 +28,7 @@ object CrossSdkSpec extends ZIOSpecDefault:
   private val resources = List(
     "Dockerfile",
     "java-proxy-opts",
+    "show-logs",
     "add-scala.py",
     "scala-expectations.json",
     "scala/launch/build.sh",
