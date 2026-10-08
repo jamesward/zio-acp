@@ -10,6 +10,7 @@ import zio.test.*
 
 import java.nio.file.{Files, Path, Paths}
 import java.time.Duration as JDuration
+import scala.jdk.CollectionConverters.*
 
 /**
  * The ACP SDKs' cross-SDK interop suite (`integration-testing/` in agentclientprotocol/java-sdk) and its raw JSON-RPC
@@ -48,7 +49,7 @@ object CrossSdkSpec extends ZIOSpecDefault:
     val home = Paths.get(java.lang.System.getProperty("user.home"))
     val mavenSettings = Option(home.resolve(".m2/settings.xml")).filter(Files.isRegularFile(_))
     val gradleInit = Option(home.resolve(".gradle/init.d")).filter(Files.isDirectory(_)).toList.flatMap: dir =>
-      Files.list(dir).toArray(Array.empty[Path]).toList.filter(p => p.toString.endsWith(".gradle") || p.toString.endsWith(".gradle.kts"))
+      Files.list(dir).iterator().asScala.toList.filter(p => p.toString.endsWith(".gradle") || p.toString.endsWith(".gradle.kts"))
     caBundle.map("env/ca-bundle.crt" -> _).toList ++
       mavenSettings.map("env/settings.xml" -> _).toList ++
       gradleInit.map(p => s"env/gradle-init.d/${p.getFileName}" -> p)
