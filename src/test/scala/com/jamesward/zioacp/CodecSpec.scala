@@ -84,6 +84,16 @@ object CodecSpec extends ZIOSpecDefault:
         bool.map(_.toJson.fromJson[SetSessionConfigOptionRequest]) == Right(bool),
       )
     ,
+    test("auth methods: untagged or \"agent\" is agent-handled, unknown types are kept"):
+      val methods = """[{"id":"a","name":"A"},{"type":"agent","id":"b","name":"B"},{"type":"future","id":"c","name":"C","x":1}]"""
+        .fromJson[List[AuthMethod]]
+      assertTrue(
+        methods.map(_.map(_.id.value)) == Right(List("a", "b", "c")),
+        methods.exists(_.take(2).forall(_.isInstanceOf[AuthMethod.Agent])),
+        methods.exists(_.lift(2).exists(_.isInstanceOf[AuthMethod.Other])),
+        methods.map(_.lift(2).map(_.toJson)) == Right(Some("""{"type":"future","id":"c","name":"C","x":1}""")),
+      )
+    ,
     test("request ids"):
       assertTrue(
         "9007199254740993".fromJson[RequestId] == Right(RequestId.Number(9007199254740993L)),

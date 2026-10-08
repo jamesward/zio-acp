@@ -94,21 +94,27 @@ enum AuthMethod derives CanEqual:
     @jsonField("_meta") meta: Meta = None,
   )
 
+  /** An auth method type from a newer protocol revision or an extension, kept as received. */
+  case Other(`type`: String, id: AuthMethodId, raw: Json.Obj)
+
   def id: AuthMethodId
 
 object AuthMethod:
+  private final case class Id(id: AuthMethodId) derives JsonCodec
+
   private given JsonCodec[Agent]    = DeriveJsonCodec.gen
   private given JsonCodec[Terminal] = DeriveJsonCodec.gen
 
-  // agent-handled methods have no "type" property
+  // agent-handled methods have no "type" property in the schema, though some SDKs send "type": "agent"
   given JsonCodec[AuthMethod] = tagged[AuthMethod]("type", Variant[AuthMethod, Terminal]("terminal"))(
     {
-      case (None, obj)  => fromJson[Agent](obj)
-      case (Some(t), _) => Left(s"unknown auth method type: $t")
+      case (None | Some("agent"), obj) => fromJson[Agent](obj)
+      case (Some(t), obj)              => fromJson[Id](obj).map(i => Other(t, i.id, obj))
     },
     {
-      case a: Agent => Some(toObj(a))
-      case _        => None
+      case a: Agent           => Some(toObj(a))
+      case Other(t, _, raw)   => Some(withField(raw, "type", Json.Str(t)))
+      case _                  => None
     },
   )
 
