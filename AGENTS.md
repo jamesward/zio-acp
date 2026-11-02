@@ -7,24 +7,12 @@
 and in-memory transports (`Transport`). See `README.md` for the feature overview. It is a library: releases go through
 sbt-ci-release with `versionScheme := Some("semver-spec")`.
 
-Follow the `zen-of-projects` Skill (extract with `./sbt extractSkillsJars`); this file records only project-specific
-facts and exceptions.
-
 ## Skills
 
-- `zen-of-scala` — Scala 3 / ZIO idioms for all code and review.
-- `zen-of-james` — design, domain modeling, effects, and testing principles.
-- `zen-of-projects` — project/build conventions.
-
-## Exceptions to zen-of-projects
-
-- `dev.zio:zio-direct` has no stable release; keep it on its newest release (RC) as long as tests pass.
-- The codecs are derived with zio-json (`derives JsonCodec`) instead of zio-schema, and the unions the ACP schema
-  defines with flattened or untagged variants, open values and catch-all cases are assembled from derived codecs with
-  the helpers in `schema/JsonSupport.scala`.
-- Test-only dependencies `com.agentclientprotocol:acp-core` and `acp-json-jackson2` (the ACP Java SDK),
-  `com.networknt:json-schema-validator` and `org.testcontainers:testcontainers` are interop and conformance tooling,
-  not library dependencies.
+- Follow the `zen-of-projects` Skill (extract with `./sbta extractSkillsJars` into the gitignored `.kiro/skills/`);
+  this file records only project-specific facts and exceptions. Read the relevant Skills before working.
+- For Scala 3 and ZIO code (writing or reviewing it), follow `zen-of-scala`.
+- For design, domain modeling, effects and testing strategy, follow `zen-of-james`.
 
 ## Protocol sources
 
@@ -38,24 +26,20 @@ facts and exceptions.
 
 ## Build, Test & Dev Workflow
 
-- Use the MCP server named `sbt-mcp-zio-acp` (`http://127.0.0.1:5150/`) for sbt interactions: `sbt-task` (separate
-  commands with `;`), `list-tasks`, `check` (`"scope":"module"` after API changes), and `glob-search` / `inspect` /
-  `symbol-location` plus the proxied javadocs.dev tools for symbol lookups. If it is unavailable, say so and fall back
-  to the `./sbt` launcher.
-  - Kiro: HTTP entry in `.kiro/settings/mcp.json`; start sbt first.
-  - Claude Code: `.mcp.json` runs `.claude/sbt-mcp-stdio.sh` (approved in `.claude/settings.json`), a stdio bridge
-    that starts a foreground sbt in cloud sessions (`CLAUDE_CODE_REMOTE=true`) and connects to an already-running sbt
-    locally. Its tools are deferred: load them with ToolSearch (search `sbt-mcp-zio-acp`). Diagnostics:
-    `/tmp/sbt-mcp-stdio.log`, `/tmp/sbt-mcp-server.log`.
+- MCP server `sbta` (this build's `./sbta --mcp`, configured in `.mcp.json` and `.kiro/settings/mcp.json`, approved in
+  `.claude/settings.json`): use it for all sbt work: `compile`, `test` (`full` for all), `run`, `check` after editing
+  Scala 3 sources, `glob-search` / `inspect` / `symbol-location` for symbols, `sbt-task` for any other command. Its
+  tools are deferred in Claude Code: load them with ToolSearch (search `sbta`). If it's unavailable, say so and use
+  `./sbta <command>`. Logs: `project/target/sbta/mcp.log`.
 - Commands (CLI fallback form):
-  - `./sbt "Test / compile"` — compile main + tests.
-  - `./sbt testFull` — full test suite (what CI runs): codecs, schema conformance, agent/client in memory, the ACP
+  - `./sbta "Test / compile"` — compile main + tests.
+  - `./sbta testFull` — full test suite (what CI runs): codecs, schema conformance, agent/client in memory, the ACP
     Java SDK in both directions (`JavaSdkInteropSpec`), and `CrossSdkSpec`.
-  - `./sbt "testOnly *SchemaSpec"` — a single spec.
-  - `./sbt "testOnly *CrossSdkSpec"` — the ACP SDKs' cross-SDK suite: its step catalogue between the Scala interop
+  - `./sbta "testOnly *SchemaSpec"` — a single spec.
+  - `./sbta "testOnly *CrossSdkSpec"` — the ACP SDKs' cross-SDK suite: its step catalogue between the Scala interop
     programs and the Java and Kotlin SDKs (four stdio cells), and its raw JSON-RPC driver against the Scala agent and
     client.
-  - `./sbt interopClasspath` — writes `target/interop-classpath.txt` for running the interop programs by hand.
+  - `./sbta interopClasspath` — writes `target/interop-classpath.txt` for running the interop programs by hand.
 - `CrossSdkSpec` needs Docker (see "Docker for tests" in zen-of-projects). Its image
   (`src/test/resources/interop/Dockerfile`, built by Testcontainers) holds JDK 21, Python, JBang and the peer SDKs
   built from source; the first build takes about 15 minutes, later runs reuse Docker's layer cache. The Scala programs
@@ -71,7 +55,21 @@ facts and exceptions.
 - Tests need no network beyond dependency resolution and the first `CrossSdkSpec` image build, and none are paid or
   metered.
 
+## Maintenance
+
+- Maintenance routine: `.factory/MAINTENANCE.md` (weekly), following the `zen-of-projects` Skill.
+
 ## Releasing
 
 - Run the `Tag Release` workflow (or push a `v<major>.<minor>.<patch>` tag); `release.yml` runs `testFull` then
   `ci-release`.
+
+## Exceptions to zen-of-projects
+
+- `dev.zio:zio-direct` has no stable release; keep it on its newest release (RC) as long as tests pass.
+- The codecs are derived with zio-json (`derives JsonCodec`) instead of zio-schema, and the unions the ACP schema
+  defines with flattened or untagged variants, open values and catch-all cases are assembled from derived codecs with
+  the helpers in `schema/JsonSupport.scala`.
+- Test-only dependencies `com.agentclientprotocol:acp-core` and `acp-json-jackson2` (the ACP Java SDK),
+  `com.networknt:json-schema-validator` and `org.testcontainers:testcontainers` are interop and conformance tooling,
+  not library dependencies.

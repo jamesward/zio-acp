@@ -54,6 +54,10 @@ object AgentClientSpec extends ZIOSpecDefault:
             PromptResponse(stopReason)
         case ContentBlock.Text("#read", _, _) :: _ =>
           client.readTextFile(ReadTextFileRequest(request.sessionId, "/a.txt")).flatMap(r => say(r.content)).as(PromptResponse(StopReason.EndTurn))
+        case ContentBlock.Text("#uninterruptible", _, _) :: _ =>
+          // a client call where interruption is off (as a finalizer releasing a resource makes it) still returns
+          client.readTextFile(ReadTextFileRequest(request.sessionId, "/a.txt")).uninterruptible.flatMap(r => say(r.content))
+            .as(PromptResponse(StopReason.EndTurn))
         case ContentBlock.Text("#slow", _, _) :: _ =>
           (say("tick") *> turn.awaitCancel).as(PromptResponse(StopReason.Cancelled))
         case ContentBlock.Text("#hang", _, _) :: _ =>
@@ -86,6 +90,40 @@ object AgentClientSpec extends ZIOSpecDefault:
     updates.get.map(_.flatMap(n => text(n.update)).mkString)
 
   def spec = suite("AgentClientSpec")(
+    test("every JSON-RPC message is logged at debug level"):
+      defer:
+        val (agent, _) = connected().run
+        agent.initialize(InitializeRequest(ProtocolVersion.V1)).run
+        val debug = ZTestLogger.logOutput.run.filter(_.logLevel.ordinal == LogLevel.Debug.ordinal).map(_.message())
+        assertTrue(
+          debug.exists(m => m.startsWith("ACP send: ") && m.contains("\"method\":\"initialize\"")),
+          debug.exists(m => m.startsWith("ACP receive: ") && m.contains("\"method\":\"initialize\"")),
+          debug.exists(m => m.startsWith("ACP send: ") && m.contains("\"agentInfo\"")),
+        )
+    ,
+    test("a launched subprocess agent answers, and closing the scope stops it while its stdout is being read"):
+      defer:
+        val javaHome = System.property("java.home").someOrFail(IllegalStateException("java.home")).run
+        val classpath = System.property("interop.classpath").someOrFail(IllegalStateException("interop.classpath")).run
+        val agent = AgentCommand(s"$javaHome/bin/java", List("-cp", classpath, "examples.EchoAgent"))
+        val updates = Ref.make(Chunk.empty[SessionNotification]).run
+        val client = RecordingClient(updates, ZIO.succeed(RequestPermissionResponse(RequestPermissionOutcome.Cancelled)))
+        val (elapsed, (init, response)) = ZIO
+          .scoped:
+            defer:
+              val connection = AcpClient.launch(agent, client, _ => ZIO.unit).run
+              val init = connection.initialize(InitializeRequest(ProtocolVersion.V1)).run
+              val session = connection.newSession(NewSessionRequest("/tmp", Nil)).run
+              (init, promptText(connection, session.sessionId, "hi").run)
+          .timed
+          .run
+        assertTrue(
+          init.agentInfo.map(_.name) == Some("echo"),
+          response.stopReason == StopReason.EndTurn,
+          chunks(updates).run == "echo: hi",
+          elapsed < 10.seconds,
+        )
+    @@ TestAspect.withLiveSystem,
     test("initialize, new session and an echoed prompt with ordered updates"):
       defer:
         val (agent, updates) = connected().run
@@ -110,6 +148,12 @@ object AgentClientSpec extends ZIOSpecDefault:
           chunks(updates).run == "selected allowcontents of /a.txt",
         )
     ,
+    test("a client call made uninterruptibly returns once answered"):
+      defer:
+        val (agent, updates) = connected().run
+        val read = promptText(agent, SessionId("s"), "#uninterruptible").timeout(10.seconds).run
+        assertTrue(read.map(_.stopReason).contains(StopReason.EndTurn), chunks(updates).run == "contents of /a.txt")
+    @@ TestAspect.withLiveClock,
     test("cancelling answers pending permission requests with cancelled"):
       defer:
         val (agent, updates) = connected(permission = ZIO.never).run

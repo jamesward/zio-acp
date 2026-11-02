@@ -314,7 +314,7 @@ final case class Directives(agent: InteropAgentImpl, session: SessionState, requ
   private def meta: IO[RpcError, PromptResponse] =
     client
       .sessionUpdate(sid, SessionUpdate.AgentMessageChunk(ContentBlock.text("meta"), meta = request.meta))
-      .as(PromptResponse(StopReason.EndTurn, request.meta))
+      .as(PromptResponse(StopReason.EndTurn, meta = request.meta))
 
   private def echoCaps: IO[RpcError, PromptResponse] =
     defer:

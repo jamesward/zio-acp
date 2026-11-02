@@ -1,5 +1,7 @@
 # zio-acp
 
+[![javadocs.dev](https://www.javadocs.dev/com.jamesward/zio-acp_3/badge.svg)](https://www.javadocs.dev/com.jamesward/zio-acp_3/latest)
+
 A Scala 3 / [ZIO](https://zio.dev) implementation of version 1 of the
 [Agent Client Protocol](https://agentclientprotocol.com) (ACP), the JSON-RPC protocol between code editors (clients)
 and coding agents. Use it to build ACP agents, ACP clients, or both.
@@ -58,6 +60,10 @@ object EchoAgent extends ZIOAppDefault:
 `sessionUpdate`, `requestPermission`, `readTextFile`/`writeTextFile`, the `terminal/*` methods, `createElicitation`,
 and extension methods. A long-running turn can race its work against `turn.awaitCancel`.
 
+ACP has no logging channel, so an agent logs to stderr, which clients capture (IntelliJ IDEA, for example, writes it
+to its `idea.log`). `AcpAgent.stderrLogging` logs at info level and above; every JSON-RPC message sent and received is
+logged at debug level (`ACP send: …`, `ACP receive: …`), for a logger that lets debug through.
+
 ## A client
 
 ```scala
@@ -101,7 +107,7 @@ ACP has no official test kit; zio-acp is checked against everything the ecosyste
 | [`JavaSdkInteropSpec`](src/test/scala/com/jamesward/zioacp/JavaSdkInteropSpec.scala) | The [ACP Java SDK](https://github.com/agentclientprotocol/java-sdk) client drives the Scala agent, and the Scala client drives a Java SDK agent. |
 | [`CrossSdkSpec`](src/test/scala/com/jamesward/zioacp/CrossSdkSpec.scala) | The ACP SDKs' cross-SDK interop suite (the Java SDK's `integration-testing/`), in a Testcontainers image: its 70+ step catalogue between the Scala programs ([`src/test/scala/interop`](src/test/scala/interop)) and the Java and [Kotlin](https://github.com/agentclientprotocol/kotlin-sdk) SDK programs, in both directions, plus its raw JSON-RPC conformance driver against the Scala agent and client. |
 
-Run everything with `./sbt testFull`. `CrossSdkSpec` needs Docker; its first image build takes about 15 minutes.
+Run everything with `./sbta testFull`. `CrossSdkSpec` needs Docker; its first image build takes about 15 minutes.
 
 ## License
 

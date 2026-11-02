@@ -47,7 +47,10 @@ final case class RpcConnection private (
         val promise = Promise.make[RpcError, Json].run
         register(id, promise).run
         send(Message.Request(id, method, Some(params))).tapError(_ => pending.update(_ - id)).run
-        val answer = promise.await.raceFirst(cancelWhen *> sendCancel(id) *> promise.await)
+        // the cancel watcher is interruptible even when the request is made where interruption is off (a finalizer:
+        // releasing a terminal as a turn is cancelled): the race waits for its loser to stop, and a loser that can't be
+        // interrupted would hold the answered request forever
+        val answer = promise.await.raceFirst((cancelWhen *> sendCancel(id) *> promise.await).interruptible)
         restore(answer).onInterrupt(pending.update(_ - id) *> sendCancel(id)).run
 
   def notify(method: String, params: Json): IO[RpcError, Unit] =
@@ -76,13 +79,14 @@ final case class RpcConnection private (
       .catchAllCause(cause => ZIO.logDebugCause(s"could not send $$/cancel_request for $id", cause))
 
   private def send(message: Message): IO[RpcError, Unit] =
-    transport
-      .send(Message.encode(message))
+    val line = Message.encode(message)
+    (ZIO.logDebug(s"ACP send: $line") *> transport.send(line))
       .tapErrorCause(cause => ZIO.logWarningCause("sending a message failed", cause))
       .orElseFail(RpcError.connectionClosed)
 
+  /** Each message, in and out, is logged at debug level: run with a debug log level to see the whole exchange. */
   private def receive(handler: RpcHandler)(line: String): UIO[Unit] =
-    Message.parse(line) match
+    ZIO.logDebug(s"ACP receive: $line") *> (Message.parse(line) match
       case Parsed.Invalid(id, error) =>
         ZIO.logWarning(s"invalid message: ${error.message}") *> send(Message.Response(id, Left(error))).ignore
       case Parsed.Ignored(reason) =>
@@ -93,6 +97,7 @@ final case class RpcConnection private (
         cancelIncoming(params)
       case Parsed.Valid(message) =>
         inbox.offer(Some(message)).unit
+    )
 
   private def startRequest(handler: RpcHandler, id: RequestId, method: String, params: Option[Json]): UIO[Unit] =
     val answer =

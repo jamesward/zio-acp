@@ -33,8 +33,8 @@ object JavaSdkInteropSpec extends ZIOSpecDefault:
     JavaClient
       .sync(StdioAcpClientTransport(scalaAgentProcess, json))
       .requestTimeout(java.time.Duration.ofSeconds(20))
-      .clientCapabilities(J.ClientCapabilities(J.FileSystemCapability(true, true), false))
-      .sessionUpdateConsumer: n =>
+      .clientCapabilities(J.ClientCapabilities(J.FileSystemCapability(true, false), false))
+      .sessionUpdateHandler: n =>
         n.update() match
           case c: J.AgentMessageChunk =>
             c.content() match

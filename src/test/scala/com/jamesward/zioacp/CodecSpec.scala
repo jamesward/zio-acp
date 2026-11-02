@@ -21,9 +21,14 @@ object CodecSpec extends ZIOSpecDefault:
       )
     ,
     test("None is omitted and _meta keeps its wire name"):
-      val json = PromptResponse(StopReason.EndTurn, Some(Json.Obj("k" -> Json.Str("v")))).toJson
+      val json = PromptResponse(StopReason.EndTurn, meta = Some(Json.Obj("k" -> Json.Str("v")))).toJson
       val noMeta = PromptResponse(StopReason.EndTurn).toJson
       assertTrue(json == """{"stopReason":"end_turn","_meta":{"k":"v"}}""", noMeta == """{"stopReason":"end_turn"}""")
+    ,
+    test("a turn's usage, as Claude's ACP adapter sends it, decodes; categories it leaves out are None"):
+      val wire = """{"stopReason":"end_turn","usage":{"inputTokens":22,"outputTokens":203,"cachedReadTokens":22356,"cachedWriteTokens":22760,"totalTokens":45341},"_meta":{"quota":{}}}"""
+      assertTrue(wire.fromJson[PromptResponse].map(_.usage) ==
+        Right(Some(TurnUsage(45341, 22, 203, None, Some(22356), Some(22760)))))
     ,
     test("content blocks use the type discriminator"):
       val json = ContentBlock.text("hi").toJson
@@ -56,6 +61,26 @@ object CodecSpec extends ZIOSpecDefault:
         stdio.toJson == """{"name":"s","command":"cmd","args":[],"env":[]}""",
         http.toJson == """{"type":"http","name":"h","url":"http://x","headers":[]}""",
         roundTrip(List(stdio, http)),
+      )
+    ,
+    test("stdio MCP servers with \"type\":\"stdio\" decode (the ACP Kotlin SDK's wire shape)"):
+      // the session/new params IntelliJ IDEA 2026.2 sends (through the Kotlin SDK); the token is redacted
+      val intellij =
+        """{"cwd":"/home/u/project","mcpServers":[{"type":"stdio","name":"jetbrains_air_ide","command":"/opt/idea/bin/idea","args":["stdioMcpServer"],"env":[{"name":"IJ_MCP_SERVER_PROJECT_PATH","value":"/home/u/project"},{"name":"IJ_MCP_SERVER_PORT","value":"64442"},{"name":"IJ_MCP_AUTH_TOKEN","value":"<redacted>"}]}],"_meta":{"additionalRoots":["/home/u/.cache/skill-views/other"]}}"""
+      val decoded = intellij.fromJson[NewSessionRequest]
+      val stdio = McpServer.Stdio(
+        "jetbrains_air_ide",
+        "/opt/idea/bin/idea",
+        List("stdioMcpServer"),
+        List(
+          EnvVariable("IJ_MCP_SERVER_PROJECT_PATH", "/home/u/project"),
+          EnvVariable("IJ_MCP_SERVER_PORT", "64442"),
+          EnvVariable("IJ_MCP_AUTH_TOKEN", "<redacted>"),
+        ),
+      )
+      assertTrue(
+        decoded.map(_.mcpServers) == Right(List(stdio)),
+        """{"type":"future","name":"f"}""".fromJson[McpServer].left.exists(_.contains("unknown MCP server type: future")),
       )
     ,
     test("permission outcomes"):

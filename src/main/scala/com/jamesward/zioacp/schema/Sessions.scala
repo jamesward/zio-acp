@@ -25,15 +25,16 @@ object McpServer:
   private given JsonCodec[Http]  = DeriveJsonCodec.gen
   private given JsonCodec[Sse]   = DeriveJsonCodec.gen
 
-  // stdio servers have no "type" property
+  // The schema gives stdio servers no "type" property, and they are encoded without one. Some clients (the ACP Kotlin
+  // SDK, and so JetBrains IDEs) send "type":"stdio", so that decodes as stdio too.
   given JsonCodec[McpServer] = tagged[McpServer](
     "type",
     Variant[McpServer, Http]("http"),
     Variant[McpServer, Sse]("sse"),
   )(
     {
-      case (None, obj) => fromJson[Stdio](obj)
-      case (Some(t), _) => Left(s"unknown MCP server type: $t")
+      case (None | Some("stdio"), obj) => fromJson[Stdio](obj)
+      case (Some(t), _)                => Left(s"unknown MCP server type: $t")
     },
     {
       case s: Stdio => Some(toObj(s))

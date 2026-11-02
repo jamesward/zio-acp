@@ -179,7 +179,7 @@ object Samples:
     sample("SetSessionConfigOptionRequest", SetSessionConfigOptionRequest(sid, SessionConfigId("verbose"), SessionConfigValue.Boolean(false))),
     sample("SetSessionConfigOptionResponse", SetSessionConfigOptionResponse(configOptions, meta)),
     sample("PromptRequest", PromptRequest(sid, contentBlocks, meta)),
-    sample("PromptResponse", PromptResponse(StopReason.MaxTurnRequests, meta)),
+    sample("PromptResponse", PromptResponse(StopReason.MaxTurnRequests, meta = meta)),
     sample("CancelNotification", CancelNotification(sid, meta)),
     sample("CancelRequestNotification", CancelRequestNotification(RequestId.Str("r"), meta)),
     sample("CancelRequestNotification", CancelRequestNotification(RequestId.Number(3))),

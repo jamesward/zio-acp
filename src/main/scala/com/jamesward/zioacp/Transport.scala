@@ -3,10 +3,11 @@ package com.jamesward.zioacp
 import zio.*
 import zio.stream.*
 
-import java.io.{FileDescriptor, FileOutputStream, InputStream, OutputStream}
+import zio.process.{Command, Process, ProcessInput}
+
+import java.io.{InputStream, OutputStream}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
-import scala.jdk.CollectionConverters.*
 
 /**
  * A bidirectional channel of JSON-RPC messages.
@@ -32,10 +33,36 @@ object Transport:
 
   /** Lines of `in`, decoded as UTF-8, skipping blank lines. */
   def lines(in: InputStream): ZStream[Any, Throwable, String] =
-    ZStream
-      .fromInputStream(in, 64 * 1024)
+    detached(in)
       .via(ZPipeline.utf8Decode >>> ZPipeline.splitLines)
       .filter(_.exists(!_.isWhitespace))
+
+  /**
+   * `in`'s bytes, read on a daemon thread of their own. A read blocked in native code (stdin with nothing to read)
+   * can't be interrupted, so a stream reading it directly would hold up the interruption of whatever reads it, and with
+   * it the process's shutdown (a SIGTERM waits for that interruption). Here the stream only waits on a queue: it's
+   * interrupted at once, and the reader thread, a daemon, doesn't keep the process alive.
+   */
+  private def detached(in: InputStream): ZStream[Any, Throwable, Byte] =
+    ZStream.unwrapScoped:
+      for
+        queue <- ZIO.acquireRelease(Queue.bounded[Take[Throwable, Byte]](16))(_.shutdown)
+        rt    <- ZIO.runtime[Any]
+        _     <- ZIO.succeed:
+                   val reader = Thread.ofPlatform().daemon(true).name("acp-stdin").unstarted: () =>
+                     def offer(take: Take[Throwable, Byte]): Boolean =
+                       Unsafe.unsafely(rt.unsafe.run(queue.offer(take)).getOrElse(_ => false))
+                     val buffer = new Array[Byte](64 * 1024)
+                     try
+                       var n = in.read(buffer)
+                       var open = true
+                       while n >= 0 && open do
+                         if n > 0 then open = offer(Take.chunk(Chunk.fromArray(buffer.take(n))))
+                         if open then n = in.read(buffer)
+                       if open then offer(Take.end)
+                     catch case e: Throwable => offer(Take.fail(e))
+                   reader.start()
+      yield ZStream.fromQueue(queue).flattenTake
 
   def fromStreams(in: InputStream, out: OutputStream): UIO[Transport] =
     Semaphore.make(1).map: writeLock =>
@@ -56,11 +83,11 @@ object Transport:
    */
   val stdio: ZIO[Scope, Nothing, Transport] =
     for
-      protocolOut <- ZIO.succeed(FileOutputStream(FileDescriptor.out))
-      _ <- ZIO.acquireRelease(ZIO.succeed(java.lang.System.out).tap(_ => ZIO.succeed(java.lang.System.setOut(java.lang.System.err))))(
-             original => ZIO.succeed(java.lang.System.setOut(original)),
-           )
-      transport <- fromStreams(java.lang.System.in, protocolOut)
+      // the original System.out carries the protocol; everything else that prints to System.out reaches stderr
+      protocolOut <- ZIO.acquireRelease(
+                       ZIO.succeed(java.lang.System.out).tap(_ => ZIO.succeed(java.lang.System.setOut(java.lang.System.err))),
+                     )(original => ZIO.succeed(java.lang.System.setOut(original)))
+      transport   <- fromStreams(java.lang.System.in, protocolOut)
     yield transport
 
   /**
@@ -73,31 +100,65 @@ object Transport:
     exitTimeout: Duration = 5.seconds,
   ): ZIO[Scope, Throwable, Transport] =
     for
-      process <- ZIO.acquireRelease(start(agent))(stop(_, exitTimeout))
-      _ <- lines(process.getErrorStream.nn)
-             .foreach(stderr)
-             .catchAllCause(cause => ZIO.logDebugCause("agent stderr closed", cause))
-             .forkScoped
-      transport <- fromStreams(process.getInputStream.nn, process.getOutputStream.nn)
-    yield transport
+      stdin   <- Queue.unbounded[Option[Chunk[Byte]]]
+      running <- ZIO.acquireRelease(launch(agent, stdin, stderr))(stop(_, exitTimeout))
+    yield Transport(
+      ZStream.fromQueue(running.stdout).flattenTake,
+      message => stdin.offer(Some(Chunk.fromArray((message + "\n").getBytes(StandardCharsets.UTF_8)))).unit,
+      stdin.offer(None).unit,
+    )
 
-  private def start(agent: AgentCommand): Task[java.lang.Process] =
-    ZIO.attemptBlocking:
-      val builder = ProcessBuilder((agent.command :: agent.args).asJava)
-      agent.cwd.foreach(dir => builder.directory(dir.toFile))
-      builder.environment().nn.putAll(agent.env.asJava)
-      builder.start().nn
+  /** A started agent, its stdin, its stdout lines, and the fibers pumping its stdout and stderr. */
+  private final case class Running(
+    process: Process,
+    stdin: Queue[Option[Chunk[Byte]]],
+    stdout: Queue[Take[Throwable, String]],
+    pumps: Fiber[Nothing, Any],
+  )
 
-  private def stop(process: java.lang.Process, exitTimeout: Duration): UIO[Unit] =
-    val awaitExit = ZIO.attemptBlockingInterrupt(process.waitFor()).unit
-    (ZIO.attemptBlocking(process.getOutputStream.nn.close()) *>
-      awaitExit.timeout(exitTimeout).flatMap:
-        case Some(_) => ZIO.unit
-        case None    =>
-          ZIO.logWarning(s"agent ${process.pid()} did not exit within $exitTimeout of its stdin closing; destroying it") *>
-            ZIO.succeed(process.destroy()) *>
-            awaitExit.timeout(exitTimeout).flatMap(exited => ZIO.succeed(process.destroyForcibly()).when(exited.isEmpty).unit)
-    ).ignoreLogged
+  /**
+   * Starts the agent, with stdin fed from `stdin` (`None` closes it), and pumps its stdout and stderr on fibers that
+   * belong to the process rather than to its readers: a read blocked on a pipe can't be interrupted, so the readers must
+   * be able to stop without waiting for one. The pumps end at end of file, once the process has exited.
+   */
+  private def launch(agent: AgentCommand, stdin: Queue[Option[Chunk[Byte]]], stderr: String => UIO[Unit]): Task[Running] =
+    val input = ProcessInput.fromStream(ZStream.fromQueue(stdin).collectWhileSome.flattenChunks, flushChunksEagerly = true)
+    val command = Command(agent.command, agent.args*).env(agent.env).stdin(input)
+    for
+      process <- agent.cwd.fold(command)(dir => command.workingDirectory(dir.toFile)).run
+      stdout  <- Queue.unbounded[Take[Throwable, String]]
+      out     <- nonBlank(process.stdout.linesStream).runIntoQueue(stdout).forkDaemon
+      err     <- nonBlank(process.stderr.linesStream).foreach(stderr)
+                   .catchAllCause(cause => ZIO.logDebugCause("agent stderr closed", cause))
+                   .forkDaemon
+    yield Running(process, stdin, stdout, out.zip(err))
+
+  private def nonBlank[E](lines: ZStream[Any, E, String]): ZStream[Any, E, String] = lines.filter(_.exists(!_.isWhitespace))
+
+  /**
+   * Closes stdin and waits for the agent to exit; after `exitTimeout` terminates it, and after another kills it.
+   *
+   * This runs as a finalizer, which is uninterruptible, and so is anything it races: a timeout could not stop the wait.
+   * Each wait is therefore made interruptible on its own, and it waits on the process's exit future rather than on
+   * zio-process's `exitCode`, which blocks a thread in `waitFor` until the process exits.
+   */
+  private def stop(running: Running, exitTimeout: Duration): UIO[Unit] =
+    val process = running.process
+    val exited: UIO[Boolean] =
+      ZIO.interruptible(process.execute(_.onExit().nn).flatMap(ZIO.fromCompletableFuture(_)))
+        .timeout(exitTimeout).map(_.isDefined).orElseSucceed(false)
+    (for
+      _      <- running.stdin.offer(None)
+      inTime <- exited
+      _      <- ZIO.unless(inTime):
+                  for
+                    _          <- ZIO.logWarning(s"agent did not exit within $exitTimeout of its stdin closing; terminating it")
+                    _          <- process.execute(_.destroy())
+                    terminated <- exited
+                    _          <- process.execute(_.destroyForcibly()).unless(terminated)
+                  yield ()
+      _      <- ZIO.interruptible(running.pumps.await).timeout(exitTimeout)
+    yield ()).ignoreLogged
 
   /** Two transports connected to each other in memory. */
   val pipe: UIO[(Transport, Transport)] =

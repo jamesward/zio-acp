@@ -26,7 +26,25 @@ object StopReason:
     Unknown(_),
   )
 
-final case class PromptResponse(stopReason: StopReason, @jsonField("_meta") meta: Meta = None) derives JsonCodec, CanEqual
+/**
+ * A prompt turn's response: why it stopped and, when the agent reports it, the turn's token usage (`usage`, from ACP's
+ * draft End-Turn Token Usage RFD; agents such as Claude's ACP adapter already send it).
+ */
+final case class PromptResponse(
+  stopReason: StopReason,
+  usage: Option[TurnUsage] = None,
+  @jsonField("_meta") meta: Meta = None,
+) derives JsonCodec, CanEqual
+
+/** The tokens a prompt turn used. The optional categories are absent when the agent doesn't report them. */
+final case class TurnUsage(
+  totalTokens: Long,
+  inputTokens: Long,
+  outputTokens: Long,
+  thoughtTokens: Option[Long] = None,
+  cachedReadTokens: Option[Long] = None,
+  cachedWriteTokens: Option[Long] = None,
+) derives JsonCodec, CanEqual
 
 /** `session/cancel`: the client cancels the ongoing prompt turn of a session. */
 final case class CancelNotification(sessionId: SessionId, @jsonField("_meta") meta: Meta = None) derives JsonCodec, CanEqual

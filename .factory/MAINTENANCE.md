@@ -2,6 +2,11 @@
 
 If there are other open PRs for this work, update that PR instead of creating a new one.
 
+The run isn't finished until the Maintenance Routine's step 8 ("Improve the factory") is done:
+every finding it lists needs a link to the PR or issue you opened or updated for it in another
+repo (`jamesward/skills`, `jamesward/projects`, or a managed tool's repo), attached with `add_repo`.
+"Not filed" isn't an allowed outcome; if filing fails, quote the error. Do it before merging.
+
 Whenever a step says to stop, or the run can't finish: revert your uncommitted edits
 (`git checkout -- .`), don't push a branch or open a PR, and end with a report that quotes what
 failed. A cloud session's Stop hook asks you to commit uncommitted changes; don't commit unvalidated
@@ -9,9 +14,10 @@ work to satisfy it. Don't send push notifications: the routine emails its result
 reply is the report.
 
 0. Load the project's MCP tools before anything else. `AGENTS.md` names the MCP server:
-   `sbt-mcp-<project>` for sbt projects, `javadocs` for Maven and Gradle projects. In Claude Code
-   these tools are deferred, so load them with ToolSearch (search for the server name). They include
-   the javadocs.dev tools such as `get_latest_version`, and for sbt also `sbt-task`. Use them for
+   `sbta` for sbt projects, `javadocs` for Maven and Gradle projects. In Claude Code these tools are
+   deferred, so load them with ToolSearch (search for the server name). They include the
+   javadocs.dev tools such as `get_latest_version`, and for sbt also the build tools (`compile`,
+   `test`, `sbt-task`, ...). Use them for
    the rest of the run, and fall back to the build tool's launcher and `curl` only when they are
    unavailable. Say which one you used.
 1. Update the Skills dependency, `com.jamesward:skills`, to its latest release. Where it's pinned:
@@ -35,17 +41,21 @@ reply is the report.
    Maven Central can rate-limit cloud sessions (HTTP 429); the retries cover that. Set every pin
    to the version it prints.
 2. Extract the Skills to `.kiro/skills/`:
-   - sbt: `extractSkillsJars` through the sbt-mcp `sbt-task` tool, or `./sbt extractSkillsJars`.
-     After `build.sbt` changes, sbt reloads and restarts the sbt-mcp server. The first `sbt-task`
-     call afterwards can report a lost connection; run it again rather than switching to `./sbt`.
+   - sbt: `extractSkillsJars` through the `sbta` server's `sbt-task` tool, or
+     `./sbta extractSkillsJars`. Run `reload` first after editing the pin, or it extracts the old
+     version; check the version in its output. If a call reports a lost connection, run it again.
    - Maven: `./mvnw -q skillsjars:extract`
    - Gradle: `./gradlew extractSkillsJars`
 
    `.kiro/skills/` is gitignored, so it doesn't exist until this runs. If the build can't download
    artifacts, quote the exact error; don't guess at a cause such as a rate limit. A "Not found" for a
    version released in the last day means it hasn't reached every mirror yet: pin the newest version
-   that does resolve, continue, and say so in the report. For any other download error (for example
-   HTTP 429 or a proxy 403), stop and report it instead of changing resolvers.
+   that does resolve, continue, and say so in the report. An HTTP 429 from Maven Central
+   for a version released in the last day usually means the same thing: the mirror doesn't have it
+   yet, so the build fell back to Maven Central (check with `curl -s -o /dev/null -w '%{http_code}'
+   https://maven-central.storage-download.googleapis.com/maven2/<path>`; 404 means not mirrored). Pin
+   the newest version the mirror has and continue, unless the repo's code already needs the unmirrored version (the build at the default branch pins it and fails to compile against the older one): then the bump can't be validated, so follow the stop rule at the top and report which artifact was missing. For any other download error (for example a 429
+   for an older artifact, or a proxy 403), stop and report it instead of changing resolvers.
 3. Read `.kiro/skills/*zen-of-projects*/SKILL.md` and follow its "Maintenance Routine" section, using
    `AGENTS.md` for this project's commands and documented exceptions. While an unreleased version of
    the Skill is being tested, `.factory/skills/zen-of-projects/SKILL.md` exists. Read that file

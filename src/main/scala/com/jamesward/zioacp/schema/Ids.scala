@@ -82,7 +82,7 @@ object RequestId:
 
   def fromJson(json: Json): Either[String, RequestId] =
     json match
-      case Json.Null      => Right(RequestId.Null)
+      case _: Json.Null.type => Right(RequestId.Null)
       case Json.Str(s)    => Right(RequestId.Str(s))
       case n: Json.Num    =>
         try Right(RequestId.Number(n.value.longValueExact))
