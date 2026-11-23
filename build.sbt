@@ -18,24 +18,24 @@ val zioVersion = "2.1.27"
 libraryDependencies ++= Seq(
   "dev.zio" %% "zio"         % zioVersion,
   "dev.zio" %% "zio-streams" % zioVersion,
-  "dev.zio" %% "zio-json"    % "1.1.1",
-  "dev.zio" %% "zio-process" % "0.8.1",
+  "dev.zio" %% "zio-json"    % "1.1.3",
+  "dev.zio" %% "zio-process" % "0.8.2",
   "dev.zio" %% "zio-direct"  % "1.0.0-RC7", // no stable zio-direct release exists yet
 
   "dev.zio" %% "zio-test"     % zioVersion % Test,
   "dev.zio" %% "zio-test-sbt" % zioVersion % Test,
 
   // interop with the official ACP Java SDK
-  "com.agentclientprotocol" % "acp-core"          % "0.80.0" % Test,
-  "com.agentclientprotocol" % "acp-json-jackson2" % "0.80.0" % Test,
+  "com.agentclientprotocol" % "acp-core"          % "0.81.0" % Test,
+  "com.agentclientprotocol" % "acp-json-jackson2" % "0.81.0" % Test,
 
   // CrossSdkSpec runs the ACP cross-SDK suite (Java and Kotlin SDKs, raw JSON-RPC driver) in a container
   "org.testcontainers" % "testcontainers" % "2.0.5" % Test,
 
   // validates our wire format against the vendored ACP v1 JSON Schema
-  "com.networknt" % "json-schema-validator" % "3.0.8" % Test,
+  "com.networknt" % "json-schema-validator" % "3.0.9" % Test,
 
-  "com.jamesward" % "skills" % "0.0.21" % Skills,
+  "com.jamesward" % "skills" % "0.0.27" % Skills,
 )
 
 fork := true
